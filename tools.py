@@ -1,3 +1,4 @@
+import os
 import smtplib
 import imaplib
 import email
@@ -6,7 +7,12 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from langchain.tools import tool
 
+from dotenv import load_dotenv
 
+load_dotenv()
+
+GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
 @tool(description="Use this tool to multiply two numbers")
 def multiply(a: int, b: int) -> int:
@@ -76,168 +82,185 @@ def github_repos(github_input: str) -> str:
     return "\n".join(result)
 
 
-# ─────────────────────────────────────────
-#  GMAIL TOOLS
-#
-#  Credentials are passed as a JSON-like string so the LLM can supply them.
-#  Format:  email=you@gmail.com password=your_app_password
-#
-#  ⚠️  Use a Gmail App Password, NOT your real password.
-#  Generate one at: https://myaccount.google.com/apppasswords
-# ─────────────────────────────────────────
-
-def _parse_credentials(creds_string: str) -> tuple[str, str]:
-    """Parse 'email=x@gmail.com password=abc123' into (email, password)."""
-    parts = {}
-    for token in creds_string.strip().split():
-        if "=" in token:
-            key, value = token.split("=", 1)
-            parts[key.strip()] = value.strip()
-    return parts.get("email", ""), parts.get("password", "")
-
-
-@tool(description=(
-    "Use this tool to write and save an email as a Gmail DRAFT (does NOT send it). "
-    "Input format: credentials='email=you@gmail.com password=app_password' "
-    "to='recipient@example.com' subject='Hello' body='Email content here'"
-))
-def gmail_save_draft(credentials: str, to: str, subject: str, body: str) -> str:
+def get_mail():
     """
-    Saves an email as a draft in Gmail via IMAP.
-    Uses Gmail App Password for authentication.
+    Create and return an authenticated Gmail IMAP connection.
     """
-    sender_email, app_password = _parse_credentials(credentials)
-    if not sender_email or not app_password:
-        return "Error: Provide credentials as 'email=x@gmail.com password=your_app_password'"
-
-    # Build the email message
-    msg = MIMEMultipart()
-    msg["From"]    = sender_email
-    msg["To"]      = to
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
-    try:
-        # Connect to Gmail IMAP and append to Drafts folder
-        mail = imaplib.IMAP4_SSL("imap.gmail.com")
-        mail.login(sender_email, app_password)
-
-        # Gmail's Drafts folder
-        status, _ = mail.append(
-            '"[Gmail]/Drafts"',
-            "\\Draft",
-            imaplib.Time2Internaldate(None),
-            msg.as_bytes()
+    if not GMAIL_ADDRESS or not GMAIL_APP_PASSWORD:
+        raise ValueError(
+            "GMAIL_ADDRESS and GMAIL_APP_PASSWORD must be set in .env"
         )
-        mail.logout()
 
-        if status == "OK":
-            return f"✅ Draft saved successfully!\nTo: {to}\nSubject: {subject}"
-        else:
-            return f"❌ Failed to save draft. IMAP status: {status}"
-
-    except imaplib.IMAP4.error as e:
-        return f"❌ IMAP error: {e}\nMake sure you are using a Gmail App Password."
-    except Exception as e:
-        return f"❌ Unexpected error: {e}"
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+    return mail
 
 
-@tool(description=(
-    "Use this tool to read and filter emails from Gmail inbox. "
-    "You can filter by sender, subject keyword, or read the latest N emails. "
-    "Input format: credentials='email=you@gmail.com password=app_password' "
-    "filter_by='sender' filter_value='boss@company.com' limit=5"
-))
-def gmail_read_emails(
-    credentials: str,
-    filter_by: str = "all",
-    filter_value: str = "",
-    limit: int = 5
-) -> str:
+@tool
+def gmail_read(limit: int = 5) -> str:
     """
-    Reads emails from Gmail inbox.
-    filter_by options: 'all', 'sender', 'subject'
+    Read the latest emails from Gmail inbox.
     """
-    sender_email, app_password = _parse_credentials(credentials)
-    if not sender_email or not app_password:
-        return "Error: Provide credentials as 'email=x@gmail.com password=your_app_password'"
 
     try:
-        mail = imaplib.IMAP4_SSL("imap.gmail.com")
-        mail.login(sender_email, app_password)
-        mail.select("inbox")
+        mail = get_mail()
+        mail.select("INBOX")
 
-        # Build IMAP search query
-        if filter_by == "sender" and filter_value:
-            search_query = f'(FROM "{filter_value}")'
-        elif filter_by == "subject" and filter_value:
-            search_query = f'(SUBJECT "{filter_value}")'
-        else:
-            search_query = "ALL"
+        status, data = mail.search(None, "ALL")
 
-        status, messages = mail.search(None, search_query)
         if status != "OK":
-            return "❌ Failed to search emails."
+            return "Failed to read inbox."
 
-        email_ids = messages[0].split()
+        email_ids = data[0].split()
+
         if not email_ids:
-            return "📭 No emails found matching your filter."
+            return "Inbox is empty."
 
-        # Get the latest `limit` emails
-        recent_ids = email_ids[-limit:][::-1]
+        email_ids = email_ids[-limit:]
 
-        result = [f"📬 Found {len(email_ids)} email(s). Showing latest {len(recent_ids)}:\n"]
+        results = []
 
-        for eid in recent_ids:
-            status, msg_data = mail.fetch(eid, "(RFC822)")
-            if status != "OK":
-                continue
+        for eid in reversed(email_ids):
+            _, msg_data = mail.fetch(eid, "(RFC822)")
 
-            raw_email = msg_data[0][1]
-            msg = email.message_from_bytes(raw_email)
+            msg = email.message_from_bytes(msg_data[0][1])
 
-            subject = msg.get("Subject", "No Subject")
-            sender  = msg.get("From", "Unknown")
-            date    = msg.get("Date", "Unknown Date")
-
-            # Extract plain text body
-            body_text = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body_text = part.get_payload(decode=True).decode(errors="ignore")
-                        break
-            else:
-                body_text = msg.get_payload(decode=True).decode(errors="ignore")
-
-            # Trim body preview
-            preview = body_text.strip()[:200] + ("..." if len(body_text) > 200 else "")
-
-            result.append(
-                f"─────────────────────\n"
-                f"From    : {sender}\n"
-                f"Subject : {subject}\n"
-                f"Date    : {date}\n"
-                f"Preview : {preview}\n"
+            results.append(
+                f"From: {msg.get('From')}\n"
+                f"Subject: {msg.get('Subject')}\n"
+                f"Date: {msg.get('Date')}"
             )
 
         mail.logout()
-        return "\n".join(result)
 
-    except imaplib.IMAP4.error as e:
-        return f"❌ IMAP error: {e}\nMake sure you're using a Gmail App Password."
+        return "\n\n-----------------\n\n".join(results)
+
     except Exception as e:
-        return f"❌ Unexpected error: {e}"
+        return f"Error: {e}"
 
 
-ALL_TOOLS = [multiply, divide, add, subtract, github_repos, gmail_save_draft, gmail_read_emails]
+@tool
+def gmail_search(
+    keyword: str,
+    search_by: str = "sender",
+    limit: int = 5
+) -> str:
+    """
+    Search Gmail emails.
+
+    search_by:
+    - sender
+    - subject
+    """
+
+    try:
+        mail = get_mail()
+        mail.select("INBOX")
+
+        if search_by.lower() == "sender":
+            query = f'(FROM "{keyword}")'
+
+        elif search_by.lower() == "subject":
+            query = f'(SUBJECT "{keyword}")'
+
+        else:
+            return "search_by must be 'sender' or 'subject'"
+
+        status, data = mail.search(None, query)
+
+        if status != "OK":
+            return "Search failed."
+
+        email_ids = data[0].split()
+
+        if not email_ids:
+            return "No matching emails found."
+
+        email_ids = email_ids[-limit:]
+
+        results = []
+
+        for eid in reversed(email_ids):
+            _, msg_data = mail.fetch(eid, "(RFC822)")
+
+            msg = email.message_from_bytes(msg_data[0][1])
+
+            results.append(
+                f"From: {msg.get('From')}\n"
+                f"Subject: {msg.get('Subject')}\n"
+                f"Date: {msg.get('Date')}"
+            )
+
+        mail.logout()
+
+        return "\n\n-----------------\n\n".join(results)
+
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@tool
+def gmail_save_draft(
+    to: str,
+    subject: str,
+    body: str
+) -> str:
+    """
+    Save an email as a Gmail draft.
+    Does NOT send the email.
+    """
+
+    try:
+        msg = MIMEMultipart()
+
+        msg["From"] = GMAIL_ADDRESS
+        msg["To"] = to
+        msg["Subject"] = subject
+
+        msg.attach(MIMEText(body, "plain"))
+
+        mail = get_mail()
+
+        status, _ = mail.append(
+            '"[Gmail]/Drafts"',
+            "\\Draft",
+            None,
+            msg.as_bytes()
+        )
+
+        mail.logout()
+
+        if status == "OK":
+            return (
+                f"Draft saved successfully.\n"
+                f"To: {to}\n"
+                f"Subject: {subject}"
+            )
+
+        return "Failed to save draft."
+
+    except Exception as e:
+        return f"Error: {e}"
+
+
+ALL_TOOLS = [
+    multiply,
+    divide,
+    add,
+    subtract,
+    github_repos,
+    gmail_read,
+    gmail_search,
+    gmail_save_draft,
+]
 
 TOOL_MAP = {
-    "multiply":          multiply,
-    "divide":            divide,
-    "add":               add,
-    "subtract":          subtract,
-    "github_repos":      github_repos,
-    "gmail_save_draft":  gmail_save_draft,
-    "gmail_read_emails": gmail_read_emails,
+    "multiply": multiply,
+    "divide": divide,
+    "add": add,
+    "subtract": subtract,
+    "github_repos": github_repos,
+    "gmail_read": gmail_read,
+    "gmail_search": gmail_search,
+    "gmail_save_draft": gmail_save_draft,
 }
