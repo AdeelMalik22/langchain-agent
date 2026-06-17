@@ -8,6 +8,18 @@ from email.mime.multipart import MIMEMultipart
 from langchain.tools import tool
 
 from dotenv import load_dotenv
+from github_client import (
+    github_user,
+    github_repository,
+    github_branch,
+    github_file,
+    github_commit,
+    github_issue,
+    github_pull_request,
+    github_search,
+    github_workflow,
+)
+
 
 load_dotenv()
 
@@ -249,6 +261,15 @@ ALL_TOOLS = [
     add,
     subtract,
     github_repos,
+    github_user,
+    github_repository,
+    github_branch,
+    github_file,
+    github_commit,
+    github_issue,
+    github_pull_request,
+    github_search,
+    github_workflow,
     gmail_read,
     gmail_search,
     gmail_save_draft,
@@ -260,6 +281,16 @@ TOOL_MAP = {
     "add": add,
     "subtract": subtract,
     "github_repos": github_repos,
+    "github_user": github_user,
+    "github_repository": github_repository,
+    "github_branch": github_branch,
+    "github_file": github_file,
+    "github_commit": github_commit,
+    "github_issue": github_issue,
+    "github_pull_request": github_pull_request,
+    "github_search": github_search,
+    "github_workflow": github_workflow,
+
     "gmail_read": gmail_read,
     "gmail_search": gmail_search,
     "gmail_save_draft": gmail_save_draft,
