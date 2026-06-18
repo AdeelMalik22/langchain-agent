@@ -56,31 +56,32 @@ def find_repo(repo_name: str):
 
     client = gh()
 
-    repos = client.get(
-        "/user/repos?per_page=100&type=all"
-    )
+    # owner/repo provided
+    if "/" in repo_name:
+        owner, repo = repo_name.split("/", 1)
 
+        data = client.get(f"/repos/{owner}/{repo}")
+
+        if isinstance(data, dict) and data.get("full_name"):
+            return owner, repo
+
+        raise Exception(f"Repository '{repo_name}' not found")
+
+    repos = client.get("/user/repos?per_page=100&type=all")
 
     if not isinstance(repos, list):
-        raise Exception(
-            f"Cannot fetch repositories: {repos}"
-        )
-
+        raise Exception(f"Cannot fetch repositories: {repos}")
 
     for r in repos:
-
         if r["name"].lower() == repo_name.lower():
-
             return (
                 r["owner"]["login"],
                 r["name"]
             )
 
-
     raise Exception(
-        f"Repository '{repo_name}' not found in your GitHub account"
+        f"Repository '{repo_name}' not found"
     )
-
 # ── Tools ────────────────────────────────────────────────────────────────────
 
 @tool
@@ -342,7 +343,7 @@ def github_issue(
 
 @tool
 def github_pull_request(
-    action: str = "create",
+    action: str = "list",
     repo: str = None,
     head: str = None,
     base: str = "main",
@@ -352,48 +353,57 @@ def github_pull_request(
     merge_method: str = "merge",
 ):
     """
-    Manage pull requests.
+    Manage GitHub pull requests.
 
-    The repository owner is automatically detected from the GitHub token.
+    Repository owner is automatically detected.
 
-    IMPORTANT:
-    If user says:
-        "create PR"
-        "open PR"
+    USER INTENT MAPPING
+
+    Create PR:
+        "create pr"
+        "open pr"
         "make a pull request"
 
-    Always use:
-    action="create"
+        =>
+        action="create"
 
-    Parameters:
+    Merge PR:
+        "merge pr"
+        "merge latest pr"
+        "merge pull request"
 
-    repo:
-        Repository name only.
-        Example:
-        langchain-agent
+        =>
+        action="merge"
 
-    head:
-        Source branch.
-        Example:
-        qa
+    List PRs:
+        "show prs"
+        "list prs"
 
-    base:
-        Target branch.
-        Example:
-        master
+        =>
+        action="list"
 
+    Examples:
 
-    Create PR example:
-
+    Create:
     {
         "action": "create",
         "repo": "langchain-agent",
         "head": "qa",
-        "base": "master",
-        "title": "Merge qa into master",
-        "body": "Changes from qa branch"
+        "base": "master"
     }
 
+    Merge latest:
+    {
+        "action": "merge",
+        "repo": "langchain-agent"
+    }
+
+    Merge specific:
+    {
+        "action": "merge",
+        "repo": "langchain-agent",
+        "number": 12
+    }
     """
 
     client = gh()
@@ -401,48 +411,91 @@ def github_pull_request(
     if not repo:
         return "Error: repository name is required"
 
+    try:
+        owner, repo = find_repo(repo)
+    except Exception as e:
+        return str(e)
 
-    owner, repo = find_repo(repo)
+    if not action:
+        action = "list"
 
-
-    # safety fallback
-    if action is None:
-        action = "create"
-
-
+    # --------------------------------------------------
+    # CREATE
+    # --------------------------------------------------
     if action == "create":
 
         if not head:
             return "Error: head branch required"
 
-        response = client.post(
+        return client.post(
             f"/repos/{owner}/{repo}/pulls",
             {
                 "title": title or f"Merge {head} into {base}",
                 "body": body or "",
                 "head": head,
-                "base": base
-            }
+                "base": base,
+            },
         )
 
-        return response
-
-
+    # --------------------------------------------------
+    # LIST
+    # --------------------------------------------------
     if action == "list":
 
         return client.get(
-            f"/repos/{owner}/{repo}/pulls"
+            f"/repos/{owner}/{repo}/pulls?state=open"
         )
 
-
+    # --------------------------------------------------
+    # GET
+    # --------------------------------------------------
     if action == "get":
+
+        if not number:
+            return "Error: PR number required"
 
         return client.get(
             f"/repos/{owner}/{repo}/pulls/{number}"
         )
 
-
+    # --------------------------------------------------
+    # MERGE
+    # --------------------------------------------------
     if action == "merge":
+
+        # Auto-find latest open PR
+        if number is None:
+
+            prs = client.get(
+                f"/repos/{owner}/{repo}/pulls?state=open"
+            )
+
+            if not isinstance(prs, list):
+                return prs
+
+            if len(prs) == 0:
+                return "No open pull requests found"
+
+            prs = sorted(
+                prs,
+                key=lambda x: x["number"],
+                reverse=True
+            )
+
+            number = prs[0]["number"]
+
+        # Optional validation
+        pr = client.get(
+            f"/repos/{owner}/{repo}/pulls/{number}"
+        )
+
+        if isinstance(pr, dict):
+
+            if pr.get("state") != "open":
+                return f"PR #{number} is not open"
+
+            if pr.get("merged"):
+                return f"PR #{number} is already merged"
 
         return client.put(
             f"/repos/{owner}/{repo}/pulls/{number}/merge",
@@ -450,7 +503,6 @@ def github_pull_request(
                 "merge_method": merge_method
             }
         )
-
 
     return f"Unknown action: {action}"
 
