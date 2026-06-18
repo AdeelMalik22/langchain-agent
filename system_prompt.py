@@ -56,6 +56,21 @@ GITHUB TOOLS
 
 GitHub tools manage repositories, users, files, branches, issues, pull requests, searches and workflows.
 
+For every GitHub tool:
+The repository name must be passed as repo.
+Never pass owner unless the tool explicitly asks.
+
+Example:
+User: show commits of langchain-agent
+
+Correct:
+github_commit(
+ action="history",
+ repo="langchain-agent"
+)
+
+Wrong:
+owner="langchain-agent"
 
 IMPORTANT:
 Never invent GitHub information.

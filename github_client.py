@@ -363,46 +363,73 @@ def github_file(
 
 @tool
 def github_commit(
-    action:str,
-    owner:str=None,
-    repo:str=None,
-    branch:str="main",
-    sha:str=None,
-    per_page:int=30
+    action: str,
+    repo: str,
+    branch: str = "master",
+    sha: str = None,
+    per_page: int = 30
 ):
     """
     View commit history and details.
 
+    repo:
+        Repository name.
+        Example:
+        langchain-agent
+
     Actions:
-        - history       → Get commit history for a branch
-        - details       → Get a single commit by sha
+        history:
+            show commits
+
+        details:
+            show single commit
     """
+
     client = gh()
 
+
     try:
-        owner, repo = resolve_repo(owner,repo)
+        owner, repo = find_repo(repo)
+
     except Exception as e:
-        return str(e)
+        return f"Repository error: {e}"
 
 
-    if action=="history":
+    if action == "history":
 
-        return client.get(
-            f"/repos/{owner}/{repo}/commits?sha={branch}&per_page={per_page}"
+        commits = client.get(
+            f"/repos/{owner}/{repo}/commits"
+            f"?sha={branch}&per_page={per_page}"
         )
 
 
-    if action=="details":
+        if not isinstance(commits, list):
+            return commits
+
+
+        return [
+            {
+                "sha": c["sha"][:7],
+                "message": c["commit"]["message"],
+                "author": c["commit"]["author"]["name"],
+                "date": c["commit"]["author"]["date"]
+            }
+            for c in commits
+        ]
+
+
+    if action == "details":
 
         if not sha:
-            return "Commit sha required"
+            return "sha is required"
+
 
         return client.get(
             f"/repos/{owner}/{repo}/commits/{sha}"
         )
 
 
-    return f"Unknown action: {action}"
+    return "Unknown action"
 
 
 @tool
