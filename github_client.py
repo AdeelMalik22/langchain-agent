@@ -300,7 +300,6 @@ def github_commit(
 @tool
 def github_issue(
     action: str,
-    owner: str = None,
     repo: str = None,
     number: int = None,
     title: str = None,
@@ -309,36 +308,123 @@ def github_issue(
     labels: list = None,
 ):
     """
-    Manage issues.
+    Manage GitHub issues.
 
-    Actions:
-        - list          → List issues (state: open/closed/all)
-        - get           → Get a single issue by number
-        - create        → Create issue (requires title, body)
-        - update        → Update title/body/state (requires number)
-        - comment       → Add a comment (requires number, body)
+    Repository owner is automatically detected from GITHUB_TOKEN.
+
+    Examples:
+
+    Create issue:
+    {
+        "action": "create",
+        "repo": "langchain-agent",
+        "title": "Bug report",
+        "body": "Something is broken"
+    }
+
+    List issues:
+    {
+        "action": "list",
+        "repo": "langchain-agent"
+    }
+
+    Get issue:
+    {
+        "action": "get",
+        "repo": "langchain-agent",
+        "number": 5
+    }
+
+    Update issue:
+    {
+        "action": "update",
+        "repo": "langchain-agent",
+        "number": 5,
+        "title": "Updated title"
+    }
+
+    Comment:
+    {
+        "action": "comment",
+        "repo": "langchain-agent",
+        "number": 5,
+        "body": "Looks good"
+    }
     """
+
     client = gh()
 
+    if not repo:
+        return "Error: repository name is required"
+
+    try:
+        owner, repo = find_repo(repo)
+    except Exception as e:
+        return str(e)
+
     if action == "list":
-        return client.get(f"/repos/{owner}/{repo}/issues?state={state}&per_page=50")
+        return client.get(
+            f"/repos/{owner}/{repo}/issues?state={state}&per_page=50"
+        )
 
     if action == "get":
-        return client.get(f"/repos/{owner}/{repo}/issues/{number}")
+
+        if not number:
+            return "Error: issue number is required"
+
+        return client.get(
+            f"/repos/{owner}/{repo}/issues/{number}"
+        )
 
     if action == "create":
-        return client.post(f"/repos/{owner}/{repo}/issues", {
-            "title": title,
-            "body": body,
-            "labels": labels or []
-        })
+
+        if not title:
+            return "Error: issue title is required"
+
+        return client.post(
+            f"/repos/{owner}/{repo}/issues",
+            {
+                "title": title,
+                "body": body or "",
+                "labels": labels or []
+            }
+        )
 
     if action == "update":
-        payload = {k: v for k, v in {"title": title, "body": body, "state": state}.items() if v}
-        return client.patch(f"/repos/{owner}/{repo}/issues/{number}", payload)
+
+        if not number:
+            return "Error: issue number is required"
+
+        payload = {}
+
+        if title is not None:
+            payload["title"] = title
+
+        if body is not None:
+            payload["body"] = body
+
+        if state is not None:
+            payload["state"] = state
+
+        return client.patch(
+            f"/repos/{owner}/{repo}/issues/{number}",
+            payload
+        )
 
     if action == "comment":
-        return client.post(f"/repos/{owner}/{repo}/issues/{number}/comments", {"body": body})
+
+        if not number:
+            return "Error: issue number is required"
+
+        if not body:
+            return "Error: comment body is required"
+
+        return client.post(
+            f"/repos/{owner}/{repo}/issues/{number}/comments",
+            {"body": body}
+        )
+
+    return f"Unknown action: {action}"
 
 
 @tool
