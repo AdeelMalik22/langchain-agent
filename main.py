@@ -1,6 +1,13 @@
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
+from langchain_core.messages import (
+    HumanMessage,
+    ToolMessage,
+    AIMessage,
+    SystemMessage
+)
+
+from system_prompt import SYSTEM_PROMPT
 from tools import ALL_TOOLS, TOOL_MAP
 
 load_dotenv()
@@ -15,7 +22,9 @@ model = init_chat_model(
 agent = model.bind_tools(ALL_TOOLS)
 
 
-messages = []
+messages = [
+    SystemMessage(content=SYSTEM_PROMPT)
+]
 def run_agent(query: str) -> str:
     messages.append(HumanMessage(content=query))
 

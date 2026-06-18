@@ -45,53 +45,53 @@ def subtract(a: int, b: int) -> int:
     return a - b
 
 
-@tool(description=(
-    "Use this tool to explore a GitHub account. "
-    "Give it a GitHub username or profile URL and it will list all public repositories "
-    "along with the main language used and the repo description. "
-    "Example input: 'https://github.com/AdeelMalik22' or just 'AdeelMalik22'"
-))
-def github_repos(github_input: str) -> str:
-    """
-    Fetches all public repos for a GitHub user.
-    Input can be a full URL like https://github.com/username or just the username.
-    """
-    # Extract username from URL if full URL is given
-    username = github_input.strip().rstrip("/")
-    if "github.com/" in username:
-        username = username.split("github.com/")[-1]
-
-    url = f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated"
-    headers = {"Accept": "application/vnd.github+json"}
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 404:
-        return f"GitHub user '{username}' not found."
-    if response.status_code != 200:
-        return f"GitHub API error: {response.status_code}"
-
-    repos = response.json()
-    if not repos:
-        return f"No public repositories found for '{username}'."
-
-    result = [f" Public Repositories for @{username}:\n"]
-    for repo in repos:
-        name        = repo.get("name", "N/A")
-        description = repo.get("description") or "No description"
-        language    = repo.get("language") or "Not specified"
-        stars       = repo.get("stargazers_count", 0)
-        repo_url    = repo.get("html_url", "")
-
-        result.append(
-            f"• {name}\n"
-            f"  Language : {language}\n"
-            f"  Stars    : {stars}\n"
-            f"  About    : {description}\n"
-            f"  URL      : {repo_url}\n"
-        )
-
-    return "\n".join(result)
+# @tool(description=(
+#     "Use this tool to explore a GitHub account. "
+#     "Give it a GitHub username or profile URL and it will list all public repositories "
+#     "along with the main language used and the repo description. "
+#     "Example input: 'https://github.com/AdeelMalik22' or just 'AdeelMalik22'"
+# ))
+# def github_repos(github_input: str) -> str:
+#     """
+#     Fetches all public repos for a GitHub user.
+#     Input can be a full URL like https://github.com/username or just the username.
+#     """
+#     # Extract username from URL if full URL is given
+#     username = github_input.strip().rstrip("/")
+#     if "github.com/" in username:
+#         username = username.split("github.com/")[-1]
+#
+#     url = f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated"
+#     headers = {"Accept": "application/vnd.github+json"}
+#
+#     response = requests.get(url, headers=headers)
+#
+#     if response.status_code == 404:
+#         return f"GitHub user '{username}' not found."
+#     if response.status_code != 200:
+#         return f"GitHub API error: {response.status_code}"
+#
+#     repos = response.json()
+#     if not repos:
+#         return f"No public repositories found for '{username}'."
+#
+#     result = [f" Public Repositories for @{username}:\n"]
+#     for repo in repos:
+#         name        = repo.get("name", "N/A")
+#         description = repo.get("description") or "No description"
+#         language    = repo.get("language") or "Not specified"
+#         stars       = repo.get("stargazers_count", 0)
+#         repo_url    = repo.get("html_url", "")
+#
+#         result.append(
+#             f"• {name}\n"
+#             f"  Language : {language}\n"
+#             f"  Stars    : {stars}\n"
+#             f"  About    : {description}\n"
+#             f"  URL      : {repo_url}\n"
+#         )
+#
+#     return "\n".join(result)
 
 
 def get_mail():
@@ -260,7 +260,6 @@ ALL_TOOLS = [
     divide,
     add,
     subtract,
-    github_repos,
     github_user,
     github_repository,
     github_branch,
@@ -280,7 +279,6 @@ TOOL_MAP = {
     "divide": divide,
     "add": add,
     "subtract": subtract,
-    "github_repos": github_repos,
     "github_user": github_user,
     "github_repository": github_repository,
     "github_branch": github_branch,
