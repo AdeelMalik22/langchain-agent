@@ -161,12 +161,39 @@ def github_repository(
     except Exception as e:
         return str(e)
 
-
-    if action=="details":
-        return client.get(
+    if action == "details":
+        data = client.get(
             f"/repos/{owner}/{repo}"
         )
 
+        return {
+            "repository": data.get("name"),
+            "owner": data.get("owner", {}).get("login"),
+
+            "description": data.get("description"),
+
+            "visibility": data.get("visibility"),
+
+            "language": data.get("language"),
+
+            "stars": data.get("stargazers_count"),
+            "forks": data.get("forks_count"),
+
+            "open_issues": data.get("open_issues_count"),
+
+            "default_branch": data.get("default_branch"),
+
+            "url": data.get("html_url"),
+
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
+
+            "license": (
+                data.get("license", {}).get("name")
+                if data.get("license")
+                else None
+            )
+        }
 
     if action=="contents":
         return client.get(
