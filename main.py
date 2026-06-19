@@ -1,7 +1,14 @@
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
-from tools import ALL_TOOLS, TOOL_MAP
+from langchain_core.messages import (
+    HumanMessage,
+    ToolMessage,
+    AIMessage,
+    SystemMessage
+)
+
+from system_prompt import SYSTEM_PROMPT
+from tools import ALL_TOOLS, TOOL_MAP, encode_image
 
 load_dotenv()
 
@@ -15,37 +22,60 @@ model = init_chat_model(
 agent = model.bind_tools(ALL_TOOLS)
 
 
-messages = []
-def run_agent(query: str) -> str:
-    messages.append(HumanMessage(content=query))
+messages = [
+    SystemMessage(content=SYSTEM_PROMPT)
+]
+def run_agent(query: str, image_path="/home/enigmatix/Pictures/Wallpapers/v2.jpeg") -> str:
+
+    if image_path:
+        image_data = encode_image(image_path)
+
+        messages.append(
+            HumanMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": query
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_data}"
+                        }
+                    }
+                ]
+            )
+        )
+
+    else:
+        messages.append(
+            HumanMessage(content=query)
+        )
+
 
     while True:
-        print("🤖 Thinking...")
+        print("🤔 Thinking...")
+
         response = agent.invoke(messages)
 
-        messages.append(response) # adding response in messages
+        messages.append(response)
 
-        # If no tool calls --> model has a final answer
         if not response.tool_calls:
             return response.content or "No response."
 
-        # Execute each tool the model requested
+
         for call in response.tool_calls:
-            tool_name = call["name"]
-            tool_args = call["args"]
-            tool_id   = call["id"]
 
-            if tool_name not in TOOL_MAP:
-                tool_result = f"Error: unknown tool '{tool_name}'"
-            else:
-                tool_result = TOOL_MAP[tool_name].invoke(tool_args)
-
-            messages.append(
-                ToolMessage(content=str(tool_result), tool_call_id=tool_id)
+            tool_result = TOOL_MAP[call["name"]].invoke(
+                call["args"]
             )
 
-        # Loop continues --> model now sees tool results and decides next step
-
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result),
+                    tool_call_id=call["id"]
+                )
+            )
 
 def main():
     while True:

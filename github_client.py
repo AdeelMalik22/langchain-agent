@@ -82,6 +82,23 @@ def find_repo(repo_name: str):
     raise Exception(
         f"Repository '{repo_name}' not found"
     )
+
+def resolve_repo(owner=None, repo=None):
+    """
+    Resolve owner automatically from repo name.
+
+    Accepts:
+    repo="AdeelMalik22/langchain-agent"
+    repo="langchain-agent"
+    """
+
+    if not repo:
+        raise Exception("Repository name is required")
+
+    if owner:
+        return owner, repo
+
+    return find_repo(repo)
 # ── Tools ────────────────────────────────────────────────────────────────────
 
 @tool
@@ -104,20 +121,29 @@ def github_user(
         return client.get("/user")
 
     if action == "details":
+
+        if not username:
+            return "Error: username is required"
+
         return client.get(f"/users/{username}")
 
+
     if action == "repos":
-        return client.get(f"/user/repos?per_page=100&visibility={visibility}&sort=updated")
+        return client.get(
+            f"/user/repos?per_page=100&visibility={visibility}&sort=updated"
+        )
+
+    return f"Unknown action: {action}"
 
 
 @tool
 def github_repository(
     action: str,
-    owner: str = None,
-    repo: str = None,
-    path: str = "",
-    base: str = None,
-    head: str = None,
+    owner: str=None,
+    repo: str=None,
+    path: str="",
+    base: str=None,
+    head: str=None
 ):
     """
     Manage repository info.
@@ -130,17 +156,68 @@ def github_repository(
     """
     client = gh()
 
+    try:
+        owner, repo = resolve_repo(owner, repo)
+    except Exception as e:
+        return str(e)
+
     if action == "details":
-        return client.get(f"/repos/{owner}/{repo}")
+        data = client.get(
+            f"/repos/{owner}/{repo}"
+        )
 
-    if action == "contents":
-        return client.get(f"/repos/{owner}/{repo}/contents/{path}")
+        return {
+            "repository": data.get("name"),
+            "owner": data.get("owner", {}).get("login"),
 
-    if action == "tags":
-        return client.get(f"/repos/{owner}/{repo}/tags")
+            "description": data.get("description"),
 
-    if action == "compare":
-        return client.get(f"/repos/{owner}/{repo}/compare/{base}...{head}")
+            "visibility": data.get("visibility"),
+
+            "language": data.get("language"),
+
+            "stars": data.get("stargazers_count"),
+            "forks": data.get("forks_count"),
+
+            "open_issues": data.get("open_issues_count"),
+
+            "default_branch": data.get("default_branch"),
+
+            "url": data.get("html_url"),
+
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at"),
+
+            "license": (
+                data.get("license", {}).get("name")
+                if data.get("license")
+                else None
+            )
+        }
+
+    if action=="contents":
+        return client.get(
+            f"/repos/{owner}/{repo}/contents/{path}"
+        )
+
+
+    if action=="tags":
+        return client.get(
+            f"/repos/{owner}/{repo}/tags"
+        )
+
+
+    if action=="compare":
+
+        if not base or not head:
+            return "Error: base and head required"
+
+        return client.get(
+            f"/repos/{owner}/{repo}/compare/{base}...{head}"
+        )
+
+
+    return f"Unknown action: {action}"
 
 
 @tool
@@ -233,6 +310,11 @@ def github_file(
     """
     client = gh()
 
+    try:
+        owner, repo = resolve_repo(owner, repo)
+    except Exception as e:
+        return str(e)
+
     if action == "read":
         try:
             data = client.get(f"/repos/{owner}/{repo}/contents/{path}?ref={ref}")
@@ -262,7 +344,14 @@ def github_file(
 
     if action == "delete":
         try:
-            sha = client.get(f"/repos/{owner}/{repo}/contents/{path}?ref={branch}")["sha"]
+            data = client.get(
+                f"/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+            )
+
+            if "sha" not in data:
+                return f"File not found: {path}"
+
+            sha = data["sha"]
             return client.delete(f"/repos/{owner}/{repo}/contents/{path}", {
                 "message": message,
                 "sha": sha,
@@ -275,32 +364,77 @@ def github_file(
 @tool
 def github_commit(
     action: str,
-    owner: str = None,
-    repo: str = None,
-    branch: str = "main",
+    repo: str,
+    branch: str = "master",
     sha: str = None,
-    per_page: int = 30,
+    per_page: int = 30
 ):
     """
     View commit history and details.
 
+    repo:
+        Repository name.
+        Example:
+        langchain-agent
+
     Actions:
-        - history       → Get commit history for a branch
-        - details       → Get a single commit by sha
+        history:
+            show commits
+
+        details:
+            show single commit
     """
+
     client = gh()
 
+
+    try:
+        owner, repo = find_repo(repo)
+
+    except Exception as e:
+        return f"Repository error: {e}"
+
+
     if action == "history":
-        return client.get(f"/repos/{owner}/{repo}/commits?sha={branch}&per_page={per_page}")
+
+        commits = client.get(
+            f"/repos/{owner}/{repo}/commits"
+            f"?sha={branch}&per_page={per_page}"
+        )
+
+
+        if not isinstance(commits, list):
+            return commits
+
+
+        return [
+            {
+                "sha": c["sha"][:7],
+                "message": c["commit"]["message"],
+                "author": c["commit"]["author"]["name"],
+                "date": c["commit"]["author"]["date"]
+            }
+            for c in commits
+        ]
+
 
     if action == "details":
-        return client.get(f"/repos/{owner}/{repo}/commits/{sha}")
+
+        if not sha:
+            return "sha is required"
+
+
+        return client.get(
+            f"/repos/{owner}/{repo}/commits/{sha}"
+        )
+
+
+    return "Unknown action"
 
 
 @tool
 def github_issue(
     action: str,
-    owner: str = None,
     repo: str = None,
     number: int = None,
     title: str = None,
@@ -309,36 +443,123 @@ def github_issue(
     labels: list = None,
 ):
     """
-    Manage issues.
+    Manage GitHub issues.
 
-    Actions:
-        - list          → List issues (state: open/closed/all)
-        - get           → Get a single issue by number
-        - create        → Create issue (requires title, body)
-        - update        → Update title/body/state (requires number)
-        - comment       → Add a comment (requires number, body)
+    Repository owner is automatically detected from GITHUB_TOKEN.
+
+    Examples:
+
+    Create issue:
+    {
+        "action": "create",
+        "repo": "langchain-agent",
+        "title": "Bug report",
+        "body": "Something is broken"
+    }
+
+    List issues:
+    {
+        "action": "list",
+        "repo": "langchain-agent"
+    }
+
+    Get issue:
+    {
+        "action": "get",
+        "repo": "langchain-agent",
+        "number": 5
+    }
+
+    Update issue:
+    {
+        "action": "update",
+        "repo": "langchain-agent",
+        "number": 5,
+        "title": "Updated title"
+    }
+
+    Comment:
+    {
+        "action": "comment",
+        "repo": "langchain-agent",
+        "number": 5,
+        "body": "Looks good"
+    }
     """
+
     client = gh()
 
+    if not repo:
+        return "Error: repository name is required"
+
+    try:
+        owner, repo = find_repo(repo)
+    except Exception as e:
+        return str(e)
+
     if action == "list":
-        return client.get(f"/repos/{owner}/{repo}/issues?state={state}&per_page=50")
+        return client.get(
+            f"/repos/{owner}/{repo}/issues?state={state}&per_page=50"
+        )
 
     if action == "get":
-        return client.get(f"/repos/{owner}/{repo}/issues/{number}")
+
+        if not number:
+            return "Error: issue number is required"
+
+        return client.get(
+            f"/repos/{owner}/{repo}/issues/{number}"
+        )
 
     if action == "create":
-        return client.post(f"/repos/{owner}/{repo}/issues", {
-            "title": title,
-            "body": body,
-            "labels": labels or []
-        })
+
+        if not title:
+            return "Error: issue title is required"
+
+        return client.post(
+            f"/repos/{owner}/{repo}/issues",
+            {
+                "title": title,
+                "body": body or "",
+                "labels": labels or []
+            }
+        )
 
     if action == "update":
-        payload = {k: v for k, v in {"title": title, "body": body, "state": state}.items() if v}
-        return client.patch(f"/repos/{owner}/{repo}/issues/{number}", payload)
+
+        if not number:
+            return "Error: issue number is required"
+
+        payload = {}
+
+        if title is not None:
+            payload["title"] = title
+
+        if body is not None:
+            payload["body"] = body
+
+        if state is not None:
+            payload["state"] = state
+
+        return client.patch(
+            f"/repos/{owner}/{repo}/issues/{number}",
+            payload
+        )
 
     if action == "comment":
-        return client.post(f"/repos/{owner}/{repo}/issues/{number}/comments", {"body": body})
+
+        if not number:
+            return "Error: issue number is required"
+
+        if not body:
+            return "Error: comment body is required"
+
+        return client.post(
+            f"/repos/{owner}/{repo}/issues/{number}/comments",
+            {"body": body}
+        )
+
+    return f"Unknown action: {action}"
 
 
 @tool
@@ -509,9 +730,9 @@ def github_pull_request(
 
 @tool
 def github_search(
-    action: str,
-    query: str = None,
-    sort: str = None,
+    action:str,
+    query:str=None,
+    sort:str=None
 ):
     """
     Search GitHub.
@@ -522,16 +743,31 @@ def github_search(
         - issues        → Search issues and PRs (sort: created/updated/comments)
     """
     client = gh()
+
+    if not query:
+        return "Error: search query required"
     sort_qs = f"&sort={sort}" if sort else ""
 
-    if action == "repos":
-        return client.get(f"/search/repositories?q={query}{sort_qs}&per_page=20")
 
-    if action == "code":
-        return client.get(f"/search/code?q={query}&per_page=20")
+    if action=="repos":
+        return client.get(
+            f"/search/repositories?q={query}{sort_qs}&per_page=20"
+        )
 
-    if action == "issues":
-        return client.get(f"/search/issues?q={query}{sort_qs}&per_page=20")
+
+    if action=="code":
+        return client.get(
+            f"/search/code?q={query}&per_page=20"
+        )
+
+
+    if action=="issues":
+        return client.get(
+            f"/search/issues?q={query}{sort_qs}&per_page=20"
+        )
+
+
+    return f"Unknown action: {action}"
 
 
 @tool
@@ -555,6 +791,10 @@ def github_workflow(
         - status        → Get a specific run's status (requires run_id)
     """
     client = gh()
+    try:
+        owner, repo = resolve_repo(owner, repo)
+    except Exception as e:
+        return str(e)
 
     if action == "list":
         return client.get(f"/repos/{owner}/{repo}/actions/workflows")
