@@ -26,6 +26,14 @@ load_dotenv()
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
+import base64
+
+def encode_image(path):
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+
 @tool(description="Use this tool to multiply two numbers")
 def multiply(a: int, b: int) -> int:
     return a * b
