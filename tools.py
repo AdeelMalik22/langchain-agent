@@ -27,11 +27,17 @@ GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
 import base64
+import mimetypes
+
 
 def encode_image(path):
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
+
+def encode_audio_to_base64(audio_file_path):
+    with open(audio_file_path, "rb") as audio_file:
+        return base64.b64encode(audio_file.read()).decode("utf-8")
 
 
 @tool(description="Use this tool to multiply two numbers")

@@ -8,7 +8,7 @@ from langchain_core.messages import (
 )
 
 from system_prompt import SYSTEM_PROMPT
-from tools import ALL_TOOLS, TOOL_MAP, encode_image
+from tools import ALL_TOOLS, TOOL_MAP, encode_image, encode_audio_to_base64
 
 load_dotenv()
 
@@ -25,7 +25,7 @@ agent = model.bind_tools(ALL_TOOLS)
 messages = [
     SystemMessage(content=SYSTEM_PROMPT)
 ]
-def run_agent(query: str, image_path="/home/enigmatix/Pictures/Wallpapers/v2.jpeg") -> str:
+def run_agent(query: str, image_path="/home/enigmatix/agent/media/istockphoto-1277822133-612x612.jpg", audio_path="/home/enigmatix/agent/media/thesoundofenglish-pronunciationstudio/transcribing_1.mp3"):
 
     if image_path:
         image_data = encode_image(image_path)
@@ -40,7 +40,27 @@ def run_agent(query: str, image_path="/home/enigmatix/Pictures/Wallpapers/v2.jpe
                     {
                         "type": "image_url",
                         "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_data}"
+                            "url": f"data:image/jpg;base64,{image_data}"
+                        }
+                    }
+                ]
+            )
+        )
+    if audio_path:
+        audio_data = encode_audio_to_base64(audio_path)
+
+        messages.append(
+            HumanMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": query
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": audio_data,
+                            "format": "mp3"
                         }
                     }
                 ]
