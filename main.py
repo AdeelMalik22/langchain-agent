@@ -7,7 +7,7 @@ from langchain_core.messages import (
     SystemMessage
 )
 
-from guardrils.input_guardrils import verify_user_input
+from guardrails.input_guardrails import verify_user_input
 from system_prompt import SYSTEM_PROMPT
 from tools import ALL_TOOLS, TOOL_MAP, encode_image, encode_audio_to_base64
 
