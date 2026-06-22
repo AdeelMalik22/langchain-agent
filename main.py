@@ -10,10 +10,8 @@ from langchain_core.messages import (
 
 from guardrails.input_guardrails import verify_user_input
 from guardrails.output_guardrails import verify_assistant_output
+from mcp_clients.gmail_mcp_client import GmailClient
 from system_prompt import SYSTEM_PROMPT
-from langchain_mcp_adapters.tools import load_mcp_tools
-
-from mcp import ClientSession, stdio_client, StdioServerParameters
 
 load_dotenv()
 
@@ -31,99 +29,90 @@ messages = [
     SystemMessage(content=SYSTEM_PROMPT)
 ]
 SERVER_PATH = "python tools.py"
-async def run_agent(query: str):
+async def run_agent(query: str,session,tools):
 
-    server_params = StdioServerParameters(
-        command="python",
-        args=["tools.py"]
-    )
-
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-
-            await session.initialize()
-            langchain_tools = await load_mcp_tools(session)
-            model_with_tools = model.bind_tools(langchain_tools)
-            messages.append(HumanMessage(content=query))
+    model_with_tools = model.bind_tools(tools)
+    messages.append(HumanMessage(content=query))
 
 
-            while True:
-                print("🤖 Thinking...")
+    while True:
+        print("🤖 Thinking...")
 
-                response = model_with_tools.invoke(messages)
-
-
-                if response.tool_calls:
-
-                    messages.append(response)
-
-                    for call in response.tool_calls:
-
-                        tool_name = call["name"]
-                        tool_args = call["args"]
-
-                        tool_result = await session.call_tool(
-                            tool_name,
-                            tool_args
-                        )
+        response = model_with_tools.invoke(messages)
 
 
-                        # Guard tool result
-                        tool_guard = verify_assistant_output(
-                            str(tool_result.content)
-                        )
+        if response.tool_calls:
 
-                        if not tool_guard.allowed:
-                            return (
-                                f"Blocked tool output: "
-                                f"{tool_guard.reason}"
-                            )
+            messages.append(response)
 
+            for call in response.tool_calls:
 
-                        messages.append(
-                            ToolMessage(
-                                content=str(tool_result.content),
-                                tool_call_id=call["id"]
-                            )
-                        )
-                    continue
+                tool_name = call["name"]
+                tool_args = call["args"]
 
-                guard = verify_assistant_output(
-                    response.content
+                tool_result = await session.call_tool(
+                    tool_name,
+                    tool_args
                 )
 
-                if not guard.allowed:
+
+                # Guard tool result
+                tool_guard = verify_assistant_output(
+                    str(tool_result.content)
+                )
+
+                if not tool_guard.allowed:
                     return (
-                        f"Blocked: {guard.reason}"
+                        f"Blocked tool output: "
+                        f"{tool_guard.reason}"
                     )
 
-                messages.append(response)
 
-                return guard.normalize_text
-
-def main():
-    while True:
-        try:
-            query = input("You: ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\n👋 Goodbye!")
-            break
-
-        if not query:
+                messages.append(
+                    ToolMessage(
+                        content=str(tool_result.content),
+                        tool_call_id=call["id"]
+                    )
+                )
             continue
 
-        if query.lower() in ("exit", "quit"):
-            print("👋 Goodbye!")
-            break
-        query_input = verify_user_input(query)
-        if not query_input.allowed:
-            print(f"Invalid input: {query_input.reason}")
-            continue
+        guard = verify_assistant_output(
+            response.content
+        )
 
-        answer = asyncio.run(run_agent(query))
+        if not guard.allowed:
+            return (
+                f"Blocked: {guard.reason}"
+            )
 
-        print(f"\n✅ Answer: {answer}\n")
+        messages.append(response)
 
+        return guard.normalize_text
+
+async def main():
+    async with GmailClient() as (session, tools):
+
+        while True:
+            try:
+                query = input("You: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n👋 Goodbye!")
+                break
+
+            if not query:
+                continue
+
+            if query.lower() in ("exit", "quit"):
+                print("👋 Goodbye!")
+                break
+
+            query_input = verify_user_input(query)
+            if not query_input.allowed:
+                print(f"Invalid input: {query_input.reason}")
+                continue
+
+            answer = await run_agent(query, session, tools)
+            print(f"\n🤖 Answer: {answer}\n")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
