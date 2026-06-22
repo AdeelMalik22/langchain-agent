@@ -20,6 +20,8 @@ from github_client import (
     github_workflow,
 )
 
+from mcp.server.fastmcp import FastMCP
+mcp = FastMCP("Gmail Server")
 
 load_dotenv()
 
@@ -40,72 +42,23 @@ def encode_audio_to_base64(audio_file_path):
         return base64.b64encode(audio_file.read()).decode("utf-8")
 
 
-@tool(description="Use this tool to multiply two numbers")
+@mcp.tool(description="Use this tool to multiply two numbers")
 def multiply(a: int, b: int) -> int:
     return a * b
 
-@tool(description="Use this tool to divide two numbers")
+@mcp.tool(description="Use this tool to divide two numbers")
 def divide(a: float, b: float) -> float:
     if b == 0:
         return "Error: Cannot divide by zero"
     return a / b
 
-@tool(description="Use this tool to add two numbers")
+@mcp.tool(description="Use this tool to add two numbers")
 def add(a: int, b: int) -> int:
     return a + b
 
-@tool(description="Use this tool to subtract two numbers")
+@mcp.tool(description="Use this tool to subtract two numbers")
 def subtract(a: int, b: int) -> int:
     return a - b
-
-
-# @tool(description=(
-#     "Use this tool to explore a GitHub account. "
-#     "Give it a GitHub username or profile URL and it will list all public repositories "
-#     "along with the main language used and the repo description. "
-#     "Example input: 'https://github.com/AdeelMalik22' or just 'AdeelMalik22'"
-# ))
-# def github_repos(github_input: str) -> str:
-#     """
-#     Fetches all public repos for a GitHub user.
-#     Input can be a full URL like https://github.com/username or just the username.
-#     """
-#     # Extract username from URL if full URL is given
-#     username = github_input.strip().rstrip("/")
-#     if "github.com/" in username:
-#         username = username.split("github.com/")[-1]
-#
-#     url = f"https://api.github.com/users/{username}/repos?per_page=100&sort=updated"
-#     headers = {"Accept": "application/vnd.github+json"}
-#
-#     response = requests.get(url, headers=headers)
-#
-#     if response.status_code == 404:
-#         return f"GitHub user '{username}' not found."
-#     if response.status_code != 200:
-#         return f"GitHub API error: {response.status_code}"
-#
-#     repos = response.json()
-#     if not repos:
-#         return f"No public repositories found for '{username}'."
-#
-#     result = [f" Public Repositories for @{username}:\n"]
-#     for repo in repos:
-#         name        = repo.get("name", "N/A")
-#         description = repo.get("description") or "No description"
-#         language    = repo.get("language") or "Not specified"
-#         stars       = repo.get("stargazers_count", 0)
-#         repo_url    = repo.get("html_url", "")
-#
-#         result.append(
-#             f"• {name}\n"
-#             f"  Language : {language}\n"
-#             f"  Stars    : {stars}\n"
-#             f"  About    : {description}\n"
-#             f"  URL      : {repo_url}\n"
-#         )
-#
-#     return "\n".join(result)
 
 
 def get_mail():
@@ -122,7 +75,7 @@ def get_mail():
     return mail
 
 
-@tool
+@mcp.tool(description="Use this tool to read emails")
 def gmail_read(limit: int = 5) -> str:
     """
     Read the latest emails from Gmail inbox.
@@ -165,7 +118,7 @@ def gmail_read(limit: int = 5) -> str:
         return f"Error: {e}"
 
 
-@tool
+@mcp.tool(description="Use this tool to filter mails")
 def gmail_search(
     keyword: str,
     search_by: str = "sender",
@@ -225,7 +178,7 @@ def gmail_search(
         return f"Error: {e}"
 
 
-@tool
+@mcp.tool(description="Use this tool to write email and save in draft section")
 def gmail_save_draft(
     to: str,
     subject: str,
@@ -269,41 +222,100 @@ def gmail_save_draft(
         return f"Error: {e}"
 
 
-ALL_TOOLS = [
-    multiply,
-    divide,
-    add,
-    subtract,
-    github_user,
-    github_repository,
-    github_branch,
-    github_file,
-    github_commit,
-    github_issue,
-    github_pull_request,
-    github_search,
-    github_workflow,
-    gmail_read,
-    gmail_search,
-    gmail_save_draft,
-]
+@mcp.tool(description="Use this tool to send draft mails")
+def gmail_send_draft(subject: str) -> str:
+    """
+    Find a draft by subject and send it.
+    """
+    try:
+        mail = get_mail()
+        mail.select('"[Gmail]/Drafts"')
 
-TOOL_MAP = {
-    "multiply": multiply,
-    "divide": divide,
-    "add": add,
-    "subtract": subtract,
-    "github_user": github_user,
-    "github_repository": github_repository,
-    "github_branch": github_branch,
-    "github_file": github_file,
-    "github_commit": github_commit,
-    "github_issue": github_issue,
-    "github_pull_request": github_pull_request,
-    "github_search": github_search,
-    "github_workflow": github_workflow,
+        status, data = mail.search(None, f'(SUBJECT "{subject}")')
 
-    "gmail_read": gmail_read,
-    "gmail_search": gmail_search,
-    "gmail_save_draft": gmail_save_draft,
-}
+        if status != "OK" or not data[0].split():
+            mail.logout()
+            return f"No draft found with subject: {subject}"
+
+        # Use the most recent matching draft
+        email_id = data[0].split()[-1]
+
+        _, msg_data = mail.fetch(email_id, "(RFC822)")
+        msg = email.message_from_bytes(msg_data[0][1])
+
+        to = msg.get("To")
+        draft_subject = msg.get("Subject")
+
+        body = ""
+
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == "text/plain":
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        body = payload.decode(
+                            part.get_content_charset() or "utf-8",
+                            errors="ignore"
+                        )
+                        break
+        else:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                body = payload.decode(
+                    msg.get_content_charset() or "utf-8",
+                    errors="ignore"
+                )
+
+        mail.logout()
+
+        if not to:
+            return "Draft does not contain a recipient email address."
+
+        # Send email
+        send_msg = MIMEMultipart()
+        send_msg["From"] = GMAIL_ADDRESS
+        send_msg["To"] = to
+        send_msg["Subject"] = draft_subject
+        send_msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(
+                GMAIL_ADDRESS,
+                to,
+                send_msg.as_string()
+            )
+
+        return (
+            f"Draft sent successfully.\n"
+            f"To: {to}\n"
+            f"Subject: {draft_subject}"
+        )
+
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool(description="Use to send emails to users")
+def gmail_send(to: str, subject: str, body: str) -> str:
+    """
+    Send an email via Gmail SMTP.
+    """
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = GMAIL_ADDRESS
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, to, msg.as_string())
+
+        return f"Email sent successfully.\nTo: {to}\nSubject: {subject}"
+
+    except Exception as e:
+        return f"Error: {e}"
+
+if __name__ == "__main__":
+    mcp.run()
