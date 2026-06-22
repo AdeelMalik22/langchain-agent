@@ -32,6 +32,14 @@ HATEFUL_PHRASES = re.compile(
     rf"\b({_GROUP_PATTERN})s?\b",
     re.IGNORECASE
 )
+
+HATEFUL_PHRASES_REVERSE_BAIS = re.compile(
+    rf"{_GROUP_PATTERN}s?\b"
+      rf".{0,30}?"
+      rf"\b(hate|kill|humiliate|bully|attack|murder|racism|deport)\b",
+      re.IGNORECASE
+)
+
 PROMPT_INJECTION = re.compile(
     r"(show|tell|reveal|give).{0,30}(system|hidden|prompt|instruction)",
     re.I
@@ -44,6 +52,12 @@ class InputGaurdrils:
     normalize_text: str
     reason: str = ""
 
+def contain_hate_speach(input:str):
+    if HATEFUL_PHRASES.search(input):
+        return True
+    if HATEFUL_PHRASES_REVERSE_BAIS.search(input):
+        return True
+    return False
 
 def normalize_text(input: str):
     return input.strip().lower()
@@ -62,7 +76,7 @@ def verify_user_input(user_input: str):
         if phrase in normalize_lower:
             return InputGaurdrils(False, "",f"Input contains blocked phrase: {phrase}")
 
-    if HATEFUL_PHRASES.search(normalize_input):
+    if contain_hate_speach(normalize_input):
         return InputGaurdrils(
             False,
             "",
