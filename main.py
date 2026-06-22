@@ -7,6 +7,7 @@ from langchain_core.messages import (
     SystemMessage
 )
 
+from guardrils.input_guardrils import verify_user_input
 from system_prompt import SYSTEM_PROMPT
 from tools import ALL_TOOLS, TOOL_MAP, encode_image, encode_audio_to_base64
 
@@ -111,6 +112,10 @@ def main():
         if query.lower() in ("exit", "quit"):
             print("👋 Goodbye!")
             break
+        query_input = verify_user_input(query)
+        if not query_input.allowed:
+            print(f"Invalid input: {query_input.reason}")
+            continue
 
         answer = run_agent(query)
         print(f"\n✅ Answer: {answer}\n")
