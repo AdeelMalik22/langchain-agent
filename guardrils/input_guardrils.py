@@ -26,19 +26,21 @@ _PROTECTED_GROUPS = [
 
 _GROUP_PATTERN = "|".join(_PROTECTED_GROUPS)
 
-HATEFUL_PHRASES = re.compile(
+HATEFUL_PHRASES = (
+    re.compile(
     rf"\b(hate|kill|humiliate|bully|attack|murder|racism|deport)\b"
     rf".{{0,30}}?"
     rf"\b({_GROUP_PATTERN})s?\b",
     re.IGNORECASE
+),
+    re.compile(
+        rf"{_GROUP_PATTERN}s?\b"
+          rf".{0,30}?"
+          rf"\b(hate|kill|humiliate|bully|attack|murder|racism|deport)\b",
+          re.IGNORECASE
+    )
 )
 
-HATEFUL_PHRASES_REVERSE_BAIS = re.compile(
-    rf"{_GROUP_PATTERN}s?\b"
-      rf".{0,30}?"
-      rf"\b(hate|kill|humiliate|bully|attack|murder|racism|deport)\b",
-      re.IGNORECASE
-)
 
 PROMPT_INJECTION = re.compile(
     r"(show|tell|reveal|give).{0,30}(system|hidden|prompt|instruction)",
@@ -54,8 +56,6 @@ class InputGaurdrils:
 
 def contain_hate_speach(input:str):
     if HATEFUL_PHRASES.search(input):
-        return True
-    if HATEFUL_PHRASES_REVERSE_BAIS.search(input):
         return True
     return False
 
