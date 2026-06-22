@@ -1,102 +1,105 @@
 from dotenv import load_dotenv
+import asyncio
+
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import (
     HumanMessage,
     ToolMessage,
-    AIMessage,
     SystemMessage
 )
 
 from guardrails.input_guardrails import verify_user_input
+from guardrails.output_guardrails import verify_assistant_output
 from system_prompt import SYSTEM_PROMPT
-from tools import ALL_TOOLS, TOOL_MAP, encode_image, encode_audio_to_base64
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+from mcp import ClientSession, stdio_client, StdioServerParameters
 
 load_dotenv()
 
 
+# LLM
 model = init_chat_model(
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     model_provider="openrouter",
     temperature=0
 )
 
-agent = model.bind_tools(ALL_TOOLS)
 
 
 messages = [
     SystemMessage(content=SYSTEM_PROMPT)
 ]
-def run_agent(query: str, image_path="/home/enigmatix/agent/media/istockphoto-1277822133-612x612.jpg", audio_path="/home/enigmatix/agent/media/thesoundofenglish-pronunciationstudio/transcribing_1.mp3"):
+SERVER_PATH = "python tools.py"
+async def run_agent(query: str):
 
-    if image_path:
-        image_data = encode_image(image_path)
+    server_params = StdioServerParameters(
+        command="python",
+        args=["tools.py"]
+    )
 
-        messages.append(
-            HumanMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": query
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpg;base64,{image_data}"
-                        }
-                    }
-                ]
-            )
-        )
-    if audio_path:
-        audio_data = encode_audio_to_base64(audio_path)
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
 
-        messages.append(
-            HumanMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": query
-                    },
-                    {
-                        "type": "input_audio",
-                        "input_audio": {
-                            "data": audio_data,
-                            "format": "mp3"
-                        }
-                    }
-                ]
-            )
-        )
-
-    else:
-        messages.append(
-            HumanMessage(content=query)
-        )
+            await session.initialize()
+            langchain_tools = await load_mcp_tools(session)
+            model_with_tools = model.bind_tools(langchain_tools)
+            messages.append(HumanMessage(content=query))
 
 
-    while True:
-        print("🤔 Thinking...")
+            while True:
+                print("🤖 Thinking...")
 
-        response = agent.invoke(messages)
-
-        messages.append(response)
-
-        if not response.tool_calls:
-            return response.content or "No response."
+                response = model_with_tools.invoke(messages)
 
 
-        for call in response.tool_calls:
+                if response.tool_calls:
 
-            tool_result = TOOL_MAP[call["name"]].invoke(
-                call["args"]
-            )
+                    messages.append(response)
 
-            messages.append(
-                ToolMessage(
-                    content=str(tool_result),
-                    tool_call_id=call["id"]
+                    for call in response.tool_calls:
+
+                        tool_name = call["name"]
+                        tool_args = call["args"]
+
+                        tool_result = await session.call_tool(
+                            tool_name,
+                            tool_args
+                        )
+
+
+                        # Guard tool result
+                        tool_guard = verify_assistant_output(
+                            str(tool_result.content)
+                        )
+
+                        if not tool_guard.allowed:
+                            return (
+                                f"Blocked tool output: "
+                                f"{tool_guard.reason}"
+                            )
+
+
+                        messages.append(
+                            ToolMessage(
+                                content=str(tool_result.content),
+                                tool_call_id=call["id"]
+                            )
+                        )
+                    continue
+
+                guard = verify_assistant_output(
+                    response.content
                 )
-            )
+
+                if not guard.allowed:
+                    return (
+                        f"Blocked: {guard.reason}"
+                    )
+
+                messages.append(response)
+
+                return guard.normalize_text
 
 def main():
     while True:
@@ -117,7 +120,8 @@ def main():
             print(f"Invalid input: {query_input.reason}")
             continue
 
-        answer = run_agent(query)
+        answer = asyncio.run(run_agent(query))
+
         print(f"\n✅ Answer: {answer}\n")
 
 
