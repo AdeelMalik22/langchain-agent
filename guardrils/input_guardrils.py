@@ -10,19 +10,27 @@ _BLOCKED_PHRASES = (
     "jailbreak",
 )
 
-_PROTECTED_GROUPS = [
+_PROTECTED_GROUPS = (
+    "race",
+    "religion",
+    "ethnicity",
+    "nationality",
+    "immigrant",
+    "refugee",
+    "black",
+    "white",
+    "asian",
+    "latino",
     "muslim",
     "christian",
-    "jain",
+    "jewish",
     "hindu",
-    "white",
-    "black",
-    "religion",
-    "language",
-    "children",
-    "man",
     "woman",
-]
+    "women",
+    "man",
+    "men",
+    "disabled",
+)
 
 _GROUP_PATTERN = "|".join(_PROTECTED_GROUPS)
 
