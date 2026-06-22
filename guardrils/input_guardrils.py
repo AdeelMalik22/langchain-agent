@@ -63,8 +63,10 @@ class InputGaurdrils:
     reason: str = ""
 
 def contain_hate_speach(input:str):
-    if HATEFUL_PHRASES.search(input):
-        return True
+    for pattern in HATEFUL_PHRASES:
+        hate_speach = pattern.search(input)
+        if hate_speach:
+            return True
     return False
 
 def normalize_text(input: str):
