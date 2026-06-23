@@ -1,50 +1,17 @@
+from mcp.server.fastmcp import FastMCP
+import email
+import imaplib
 import os
 import smtplib
-import imaplib
-import email
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-
+from email.mime.text import MIMEText
 from dotenv import load_dotenv
 
-from mcp.server.fastmcp import FastMCP
-mcp = FastMCP("Gmail Server")
-
 load_dotenv()
-
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
-import base64
-
-
-def encode_image(path):
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
-
-
-def encode_audio_to_base64(audio_file_path):
-    with open(audio_file_path, "rb") as audio_file:
-        return base64.b64encode(audio_file.read()).decode("utf-8")
-
-
-@mcp.tool(description="Use this tool to multiply two numbers")
-def multiply(a: int, b: int) -> int:
-    return a * b
-
-@mcp.tool(description="Use this tool to divide two numbers")
-def divide(a: float, b: float) -> float:
-    if b == 0:
-        return "Error: Cannot divide by zero"
-    return a / b
-
-@mcp.tool(description="Use this tool to add two numbers")
-def add(a: int, b: int) -> int:
-    return a + b
-
-@mcp.tool(description="Use this tool to subtract two numbers")
-def subtract(a: int, b: int) -> int:
-    return a - b
+gmail_mcp = FastMCP("Gmail Server")
 
 
 def get_mail():
@@ -61,7 +28,7 @@ def get_mail():
     return mail
 
 
-@mcp.tool(description="Use this tool to read emails")
+@gmail_mcp.tool(description="Use this tool to read emails")
 def gmail_read(limit: int = 5) -> str:
     """
     Read the latest emails from Gmail inbox.
@@ -104,11 +71,11 @@ def gmail_read(limit: int = 5) -> str:
         return f"Error: {e}"
 
 
-@mcp.tool(description="Use this tool to filter mails")
+@gmail_mcp.tool(description="Use this tool to filter mails")
 def gmail_search(
-    keyword: str,
-    search_by: str = "sender",
-    limit: int = 5
+        keyword: str,
+        search_by: str = "sender",
+        limit: int = 5
 ) -> str:
     """
     Search Gmail emails.
@@ -164,11 +131,11 @@ def gmail_search(
         return f"Error: {e}"
 
 
-@mcp.tool(description="Use this tool to write email and save in draft section")
+@gmail_mcp.tool(description="Use this tool to write email and save in draft section")
 def gmail_save_draft(
-    to: str,
-    subject: str,
-    body: str
+        to: str,
+        subject: str,
+        body: str
 ) -> str:
     """
     Save an email as a Gmail draft.
@@ -208,7 +175,7 @@ def gmail_save_draft(
         return f"Error: {e}"
 
 
-@mcp.tool(description="Use this tool to send draft mails")
+@gmail_mcp.tool(description="Use this tool to send draft mails")
 def gmail_send_draft(subject: str) -> str:
     """
     Find a draft by subject and send it.
@@ -282,7 +249,7 @@ def gmail_send_draft(subject: str) -> str:
         return f"Error: {e}"
 
 
-@mcp.tool(description="Use to send emails to users")
+@gmail_mcp.tool(description="Use to send emails to users")
 def gmail_send(to: str, subject: str, body: str) -> str:
     """
     Send an email via Gmail SMTP.
@@ -303,9 +270,5 @@ def gmail_send(to: str, subject: str, body: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-@mcp.tool(description="Testing output guardrail")
-def test_hate_output():
-    return "I hate muslim people and want to attack them"
-
 if __name__ == "__main__":
-    mcp.run()
+    gmail_mcp.run()

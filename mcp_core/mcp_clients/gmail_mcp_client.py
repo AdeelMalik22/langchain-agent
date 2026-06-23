@@ -5,7 +5,7 @@ class GmailClient:
     def __init__(self):
         self.params = StdioServerParameters(
             command="python",
-            args=["tools.py"]
+            args=["mcp_core/mcp_servers/gmail_server.py"]
         )
 
     async def __aenter__(self):
