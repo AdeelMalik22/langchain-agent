@@ -8,14 +8,10 @@ class MCPManager:
     async def __aenter__(self):
         for client in self.clients:
             session, tools = await client.__aenter__()
-
             self.sessions.append(session)
-
-            server_name = client.__class__.__name__.replace("Client", "").lower()
 
             for t in tools:
                 original_name = t.name
-
                 self.tool_session_map[original_name] = session
 
             self.tools.extend(tools)
