@@ -42,8 +42,8 @@ HATEFUL_PHRASES = (
     re.IGNORECASE
 ),
     re.compile(
-        rf"{_GROUP_PATTERN}s?\b"
-          rf".{0,30}?"
+        rf"\b({_GROUP_PATTERN})s?\b"
+          rf".{{0,30}}?"
           rf"\b(hate|kill|humiliate|bully|attack|murder|racism|deport)\b",
           re.IGNORECASE
     )
