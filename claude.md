@@ -50,7 +50,6 @@ graph TD
     - `image_audio_server.py`: FastMCP server providing image analysis placeholders (base64 image URI formatting) and audio transcription tools.
   - **`internal_tools/`**:
     - `audio_model.py`: Backend transcription model using `faster_whisper.WhisperModel` running on CPU (`int8`).
-- **`github_client.py`**: Legacy file containing LangChain `@tool` definitions for various GitHub Actions (branch, issue, PR, workflow, file, and repository management). *Note: These tools are currently inactive and not integrated into the main agent CLI.*
 - **`system_prompt.py`**: Houses the system guidelines and tool descriptions injected into the agent.
 
 ---
@@ -96,15 +95,10 @@ graph TD
 
 When working on or debugging the project, keep the following quirks in mind:
 
-1. **GitHub Tools (`github_client.py`)**:
-   - Although defined as LangChain `@tool` decorators and heavily described in `system_prompt.py`, these tools are **not** loaded in `main.py` or wrapped in MCP.
-   - **Do not** attempt to call them unless they are explicitly imported and bound to the agent.
-2. **Mathematical Tools**:
-   - The `system_prompt.py` and the original `README.md` list mathematical tools (`add`, `subtract`, `multiply`, `divide`). 
-   - No such tools are currently implemented or exposed in the code.
-3. **Audio Transcription Backend (`image_audio_server.py` vs `audio_model.py`)**:
+
+1**Audio Transcription Backend (`image_audio_server.py` vs `audio_model.py`)**:
    - The `faster_whisper` imports in `image_audio_server.py` are commented out, and `audio_to_text` returns a dummy text string (`"transcribe_file(audio_path)"`).
    - However, a functional CPU-based Whisper transcriber is available in `mcp_core/internal_tools/audio_model.py`.
-4. **Environment Configuration**:
+2**Environment Configuration**:
    - Ensure a `.env` file exists with `OPENROUTER_API_KEY`, `GMAIL_ADDRESS`, and `GMAIL_APP_PASSWORD`.
    - If GMail authentication credentials are not set, the Gmail MCP server will fail to start.

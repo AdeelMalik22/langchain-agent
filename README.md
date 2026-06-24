@@ -42,7 +42,6 @@ This project implements a modular agent loop featuring input/output guardrails a
 agent/
 ├── main.py                    # Application entry point and interactive CLI loop
 ├── system_prompt.py           # Core agent guidelines, rules, and prompt constraints
-├── github_client.py           # Legacy file containing unused LangChain GitHub tools
 ├── requirements.txt           # Python packages and project dependencies
 ├── .env                       # Environment variables (to be created)
 ├── claude.md                  # Detailed developer and AI assistant documentation
@@ -121,14 +120,6 @@ python main.py
 
 Type `exit` or `quit` to terminate the session.
 
----
-
-## Legacy Components
-
-*   **`github_client.py`**: Contains comprehensive LangChain tool implementations for managing GitHub branches, commits, PRs, files, search, and workflows. These tools are currently **not** registered in the `MCPManager` or bound to the active agent run loop.
-*   **Math Tools**: Math features listed in legacy docs are not present in the current codebase.
-
----
 
 ## Developer Documentation
 
