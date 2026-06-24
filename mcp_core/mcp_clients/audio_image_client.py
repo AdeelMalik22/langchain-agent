@@ -5,7 +5,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 class AudioImageClient:
     def __init__(self):
         self.params = StdioServerParameters(
-            command=sys.executable,
+            command="python",
             args=["mcp_core/mcp_servers/image_audio_server.py"]
         )
 
