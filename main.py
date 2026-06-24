@@ -1,6 +1,7 @@
 import asyncio
 from agents.agent import run_agent
 from guardrails.input_guardrails import verify_user_input
+from mcp_core.mcp_clients.github_client import GithubClient
 from mcp_core.mcp_clients.audio_image_client import AudioImageClient
 from mcp_core.mcp_clients.gmail_mcp_client import GmailClient
 from mcp_core.mcp_manager import MCPManager
@@ -9,7 +10,8 @@ from mcp_core.mcp_manager import MCPManager
 async def main():
     async with MCPManager([
         GmailClient(),
-        AudioImageClient()
+        AudioImageClient(),
+        GithubClient()
     ]) as (sessions, tools, tool_map):
         while True:
             try:
