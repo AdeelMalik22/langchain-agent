@@ -1,10 +1,14 @@
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.append(str(PROJECT_ROOT))
+
 from mcp.server.fastmcp import FastMCP
 import base64
 import tempfile
 import requests
-import sys
-
-# from internal_tools.audio_model import transcribe_file
+from mcp_core.internal_tools.audio_model import transcribe_file
 
 audio_img_mcp = FastMCP("Audio Img Server")
 
@@ -24,8 +28,7 @@ def encode_audio_to_base64(audio_file_path):
 )
 def audio_to_text(audio_path: str):
     try:
-
-        text = "transcribe_file(audio_path)"
+        text = transcribe_file(audio_path)
 
         return {
             "type": "transcript",
@@ -41,7 +44,7 @@ def audio_to_text(audio_path: str):
 )
 def transcribe_audio_url(url: str):
     try:
-
+        from internal_tools.audio_model import transcribe_file
         r = requests.get(url)
 
         tmp = tempfile.NamedTemporaryFile(

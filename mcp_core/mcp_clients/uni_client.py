@@ -1,12 +1,11 @@
-import sys
 from mcp import StdioServerParameters, stdio_client, ClientSession
 from langchain_mcp_adapters.tools import load_mcp_tools
 
-class AudioImageClient:
+class UniClient:
     def __init__(self):
         self.params = StdioServerParameters(
-            command=sys.executable,
-            args=["mcp_core/mcp_servers/image_audio_server.py"]
+            command="python",
+            args=["mcp_core/mcp_servers/uni_backend_server.py"]
         )
 
     async def __aenter__(self):
