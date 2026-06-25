@@ -18,9 +18,9 @@ load_dotenv()
 
 # LLM
 model = init_chat_model(
-    "openai/gpt-oss-120b:free",
-    model_provider="openrouter",
-    temperature=0
+        os.getenv("AGENT_MODEL"),
+        model_provider="openrouter",
+        temperature=0
 )
 
 

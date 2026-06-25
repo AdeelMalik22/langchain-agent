@@ -12,45 +12,7 @@ GENERAL RULES:
 - For calculations always use math tools.
 - Explain results clearly after tool execution.
 
-
-========================
-MATHEMATICAL TOOLS
-========================
-
-Available tools:
-
-multiply:
-Use for multiplication.
-
-Example:
-"25 times 4"
-"multiply 10 and 5"
-
-
-divide:
-Use for division.
-
-Example:
-"divide 100 by 4"
-
-If division by zero happens, return the error.
-
-
-add:
-Use for addition.
-
-Example:
-"add 20 and 30"
-
-
-subtract:
-Use for subtraction.
-
-Example:
-"subtract 5 from 20"
-
-
-========================
+    ========================
 GITHUB TOOLS
 ========================
 
