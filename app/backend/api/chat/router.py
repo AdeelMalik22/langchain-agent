@@ -1,6 +1,8 @@
 import sys
 import os
 
+from api.utils.redis_client import cache
+
 # Project root is 3 levels up from here (api/chat/router.py → backend → app → agent)
 _PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..", "..")
@@ -53,6 +55,7 @@ async def health():
 
 
 @router.post("/message", response_model=ChatResponse)
+@cache(expire=120)
 async def send_message(request: ChatRequest):
     """Send a message to the AI agent and receive a reply."""
     if _tools is None or _tool_map is None:
