@@ -1,0 +1,68 @@
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+from celery import Celery
+from dotenv import load_dotenv
+
+load_dotenv()
+
+GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+
+
+celery = Celery(
+    "agent_tasks",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/1",
+)
+
+celery.conf.update(
+    task_track_started=True,
+    task_serializer="json",
+    result_serializer="json",
+    accept_content=["json"],
+    # Retry config for transient SMTP failures
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+)
+
+
+@celery.task(
+    bind=True,
+    name="tasks.send_email",
+    max_retries=3,
+    default_retry_delay=10,   # seconds between retries
+)
+def send_email_task(self, to: str, subject: str, body: str) -> dict:
+    """
+    Celery task: send an email via Gmail SMTP.
+    Retries up to 3 times on transient failures.
+    """
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = GMAIL_ADDRESS
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_ADDRESS, to, msg.as_string())
+
+        return {
+            "status": "sent",
+            "to": to,
+            "subject": subject,
+        }
+
+    except smtplib.SMTPException as exc:
+        # Retry on SMTP errors (network blip, rate limit, etc.)
+        raise self.retry(exc=exc)
+
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "error": str(exc),
+        }

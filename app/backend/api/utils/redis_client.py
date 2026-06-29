@@ -168,24 +168,23 @@ def cache(expire=60):
                 # Another request is generating the cache
                 print("WAITING FOR LOCK")
 
-
                 for _ in range(50):
 
                     await asyncio.sleep(0.1)
 
-
-                    cached = redis_client.get(
-                        cache_key
-                    )
-
+                    cached = redis_client.get(cache_key)
                     if cached:
                         print("CACHE READY")
                         return json.loads(cached)
 
+                    # Lock disappeared before cache was set — worker failed
+                    lock_still_held = redis_client.get(lock_key)
+                    if not lock_still_held:
+                        # Fall through and run the function ourselves
+                        print("LOCK OWNER FAILED — retrying")
+                        return await func(*args, **kwargs)
 
-                raise Exception(
-                    "Cache generation timeout"
-                )
+                raise Exception("Cache generation timeout")
 
 
         return async_wrapper

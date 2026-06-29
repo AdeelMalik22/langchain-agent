@@ -1,10 +1,15 @@
 import sys
 import os
 
-# Ensure project root is on sys.path so agent/ guardrails/ mcp_core/ resolve
+# Project root → resolves agent/ guardrails/ mcp_core/ app/
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+# Backend root → resolves api/ (user/ books/ chat/ ...) relative to app/backend/
+_BACKEND_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _BACKEND_ROOT not in sys.path:
+    sys.path.insert(0, _BACKEND_ROOT)
 
 from contextlib import asynccontextmanager
 

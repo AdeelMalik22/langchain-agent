@@ -2,10 +2,18 @@ from mcp.server.fastmcp import FastMCP
 import email
 import imaplib
 import os
+import sys
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
+
+# Ensure project root is on sys.path when run as an MCP subprocess
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+from app.backend.api.utils.celery_client import send_email_task
 
 load_dotenv()
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
@@ -252,23 +260,21 @@ def gmail_send_draft(subject: str) -> str:
 @gmail_mcp.tool(description="Use to send emails to users")
 def gmail_send(to: str, subject: str, body: str) -> str:
     """
-    Send an email via Gmail SMTP.
+    Queue an email send via Celery (non-blocking).
+    The actual SMTP delivery happens in a background worker.
+    Returns immediately with a task ID so the agent isn't blocked.
     """
     try:
-        msg = MIMEMultipart()
-        msg["From"] = GMAIL_ADDRESS
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
-
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_ADDRESS, to, msg.as_string())
-
-        return f"Email sent successfully.\nTo: {to}\nSubject: {subject}"
+        task = send_email_task.delay(to, subject, body)
+        return (
+            f"Email queued successfully.\n"
+            f"To: {to}\n"
+            f"Subject: {subject}\n"
+            f"Task ID: {task.id}"
+        )
 
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error queuing email: {e}"
 
 if __name__ == "__main__":
     gmail_mcp.run()
