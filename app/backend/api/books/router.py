@@ -5,6 +5,7 @@ from fastapi.params import Depends
 from api.books.schema.books import Book, GetAllBooks, GetAssignedBooks
 from api.utils.auth import get_current_user
 from api.utils.db_collection import mongodb
+from api.utils.redis_client import cache
 
 router = APIRouter(
     prefix="/book",
@@ -34,7 +35,7 @@ async def assign_to_department(payload:GetAllBooks,current_user:str = Depends(ge
     }
     return result
 
-
+@cache(expire=120)
 @router.get("/list",response_model=List[Book])
 async def get_books(current_user:str = Depends(get_current_user)):
     result = await mongodb["books"].find().to_list(None)

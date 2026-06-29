@@ -15,27 +15,31 @@ async def main():
         GithubClient(),
         UniClient()
     ]) as (sessions, tools, tool_map):
-        while True:
-            try:
-                query = input("You: ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print("\n👋 Goodbye!")
-                break
+        try:
+            while True:
+                try:
+                    query = input("You: ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    print("\n👋 Goodbye!")
+                    break
 
-            if not query:
-                continue
+                if not query:
+                    continue
 
-            if query.lower() in ("exit", "quit"):
-                print("👋 Goodbye!")
-                break
+                if query.lower() in ("exit", "quit"):
+                    print("👋 Goodbye!")
+                    break
 
-            query_input = verify_user_input(query)
-            if not query_input.allowed:
-                print(f"Invalid input: {query_input.reason}")
-                continue
+                query_input = verify_user_input(query)
+                if not query_input.allowed:
+                    print(f"Invalid input: {query_input.reason}")
+                    continue
 
-            answer = await run_agent(query, tools, tool_map)
-            print(f"\n🤖 Answer: {answer}\n")
+                answer = await run_agent(query, tools, tool_map)
+                print(f"\n🤖 Answer: {answer}\n")
+
+        except Exception as e:
+            return f"LLM error: {str(e)}"
 
 if __name__ == "__main__":
     asyncio.run(main())

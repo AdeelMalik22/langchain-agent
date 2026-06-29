@@ -1,38 +1,105 @@
 # LangChain AI Agent with Model Context Protocol (MCP)
 
-An intelligent, guardrailed AI agent built with LangChain that leverages the `openai/gpt-oss-120b:free` model from OpenRouter. The agent communicates with local services (Gmail and Audio/Image helpers) using the Model Context Protocol (MCP) to perform complex tasks on behalf of the user.
+An intelligent, guardrailed AI agent built with LangChain and powered by OpenRouter. The agent is served through a **FastAPI backend** with a built-in **chat UI**, Redis response caching, and Kafka event logging. It communicates with multiple local MCP servers to perform complex tasks — reading email, browsing GitHub, transcribing audio, and interacting with a University management backend.
 
 ---
 
 ## Architecture Overview
 
-This project implements a modular agent loop featuring input/output guardrails and an MCP Server ecosystem:
+```
+Browser / Chat UI
+       │  HTTP
+       ▼
+┌─────────────────────────────────┐
+│        FastAPI Backend          │
+│  ┌──────────┐  ┌─────────────┐  │
+│  │  REST    │  │  /chat      │  │
+│  │  Routers │  │  /message   │  │
+│  └──────────┘  └──────┬──────┘  │
+│                        │        │
+│          ┌─────────────▼──────┐  │
+│          │  Input Guardrails  │  │
+│          └─────────────┬──────┘  │
+│                        │        │
+│          ┌─────────────▼──────┐  │
+│          │  LangChain Agent   │  │
+│          │  (OpenRouter LLM)  │  │
+│          └─────────────┬──────┘  │
+│                        │        │
+│          ┌─────────────▼──────┐  │
+│          │   MCP Tool Router  │  │
+│          └──┬──┬──┬──┬────────┘  │
+└────────────────────────────────┘
+             │  │  │  │
+    ┌────────┘  │  │  └──────────┐
+    ▼           ▼  ▼             ▼
+ Gmail      GitHub  Audio/   University
+ Server     Server  Image    Backend
+                    Server   Server
+```
 
-1. **User Command Line Interface**: Reads user requests.
-2. **Input Guardrails**: Rejects safety violations, hateful content, and prompt injection attempts before they reach the LLM.
-3. **Agent Loop (LangChain)**: Binds active MCP tools to the OpenRouter LLM. Invocations and tool executions are routed dynamically.
-4. **MCP Servers**: Standalone subprocesses running FastMCP servers for Gmail actions and Image/Audio processing.
-5. **Output Guardrails**: Validates final replies and intermediate tool results (like audio transcripts) against safety policies.
+**Request lifecycle:**
+1. **Chat UI / API client** sends a message to `POST /chat/message`
+2. **Redis Cache** is checked — cache hit returns instantly, no LLM call made
+3. **Input Guardrails** reject unsafe, hateful, or injected content
+4. **LangChain Agent** reasons over the query and invokes MCP tools as needed
+5. **MCP Servers** execute the actual actions (email, GitHub, audio, university data)
+6. The reply is cached in Redis and returned to the client
+7. **Kafka** logs key events (logins, etc.) asynchronously
 
 ---
 
-## Active Features & Tools
+## Features & Tools
 
-### 1. Gmail Tools (MCP-driven)
-*   **`gmail_read`**: Reads the latest emails from your inbox.
-*   **`gmail_search`**: Searches your inbox by sender or subject.
-*   **`gmail_save_draft`**: Creates and saves an email draft in your draft folder without sending.
-*   **`gmail_send_draft`**: Locates a draft by subject and sends it.
-*   **`gmail_send`**: Directly drafts and sends an email via SMTP.
+### 🤖 AI Agent
+- Powered by `openai/gpt-oss-120b:free` via **OpenRouter**
+- Full ReAct tool-use loop via **LangChain**
+- Guardrailed input/output for safety
 
-### 2. Audio & Image Tools (MCP-driven)
-*   **`audio_to_text`**: Transcribes a local audio file.
-*   **`transcribe_audio_url`**: Downloads audio from a URL and transcribes it.
-*   **`image_to_text`**: Prepares local images for analysis (encodes them as base64 data URIs).
+### 📧 Gmail Tools (MCP)
+| Tool | Description |
+|---|---|
+| `gmail_read` | Read latest emails from inbox |
+| `gmail_search` | Search by sender or subject |
+| `gmail_save_draft` | Save a draft without sending |
+| `gmail_send_draft` | Find a draft by subject and send it |
+| `gmail_send` | Directly compose and send an email |
 
-### 3. Guardrail Protections
-*   **Input Guardrails**: Sanitizes input and checks against hate speech regex, prompt injections, and blocked terms.
-*   **Output Guardrails**: Filters LLM responses and generated audio transcripts for injection attempts or inappropriate language.
+### 🐙 GitHub Tools (MCP)
+| Tool | Description |
+|---|---|
+| `search_repositories` | Search GitHub repos by query |
+| `get_repository` | Get details of a specific repo |
+| `list_commits` | List recent commits on a branch |
+| `get_file_contents` | Read a file from a repo |
+| `create_issue` | Open a new issue |
+| `list_issues` | List open issues on a repo |
+| `create_pull_request` | Open a pull request |
+
+### 🎵 Audio & Image Tools (MCP)
+| Tool | Description |
+|---|---|
+| `audio_to_text` | Transcribe a local audio file |
+| `transcribe_audio_url` | Download and transcribe audio from a URL |
+| `image_to_text` | Encode a local image as base64 for analysis |
+
+### 🏫 University Backend Tools (MCP)
+| Tool | Description |
+|---|---|
+| `user_login` | Authenticate a user and retrieve a token |
+| `get_departments` | Fetch all departments |
+
+### 🛡️ Guardrails
+- **Input**: Blocks hate speech, prompt injection, and blacklisted terms before hitting the LLM
+- **Output**: Validates agent replies and transcripts before returning to the user
+
+### ⚡ Redis Caching
+- Identical queries are served from cache — **no repeated LLM or tool calls**
+- Cache TTL: 120 seconds (configurable per route)
+
+### 📨 Kafka Event Logging
+- Key events (e.g. user login) are published to a Kafka topic
+- Kafka + Zookeeper run via Docker Compose
 
 ---
 
@@ -40,87 +107,173 @@ This project implements a modular agent loop featuring input/output guardrails a
 
 ```
 agent/
-├── main.py                    # Application entry point and interactive CLI loop
-├── system_prompt.py           # Core agent guidelines, rules, and prompt constraints
-├── requirements.txt           # Python packages and project dependencies
-├── .env                       # Environment variables (to be created)
-├── claude.md                  # Detailed developer and AI assistant documentation
+├── main.py                        # CLI entry point (terminal-based agent)
+├── system_prompt.py               # Agent guidelines and prompt constraints
+├── requirements.txt               # Root-level Python dependencies
+├── .env                           # Environment variables (create from .env.example)
+├── .env.example                   # Template for required env vars
+├── claude.md                      # Developer documentation and execution flow
 │
 ├── agents/
-│   └── agent.py               # Configures the LangChain chat model and coordinates the reasoning loop
+│   └── agent.py                   # LangChain agent: model binding and reasoning loop
 │
 ├── guardrails/
-│   ├── input_guardrails.py    # Checks user inputs before invoking the agent
-│   └── output_guardrails.py   # Checks agent outputs and transcripts before printing
+│   ├── input_guardrails.py        # Pre-LLM safety checks
+│   └── output_guardrails.py       # Post-LLM output validation
 │
-└── mcp_core/
-    ├── mcp_manager.py         # Asynchronously manages the lifecycle of stdio-based MCP clients
-    ├── tool_routing.py        # Routes tool executions to their designated MCP server sessions
-    ├── internal_tools/
-    │   └── audio_model.py     # Local Whisper model loader for transcribing audio
-    ├── mcp_clients/
-    │   ├── gmail_mcp_client.py   # Client interface for Gmail MCP server
-    │   └── audio_image_client.py # Client interface for Audio/Image MCP server
-    └── mcp_servers/
-        ├── gmail_server.py       # IMAP/SMTP FastMCP server for Gmail integrations
-        └── image_audio_server.py # FastMCP server for image-to-text formatting and audio transcription
+├── mcp_core/
+│   ├── mcp_manager.py             # Lifecycle manager for all MCP stdio clients
+│   ├── tool_routing.py            # Routes tool calls to the correct MCP session
+│   ├── internal_tools/
+│   │   └── audio_model.py         # Local Whisper model loader
+│   ├── mcp_clients/
+│   │   ├── gmail_mcp_client.py    # Gmail MCP client
+│   │   ├── github_client.py       # GitHub MCP client
+│   │   ├── audio_image_client.py  # Audio/Image MCP client
+│   │   └── uni_client.py          # University backend MCP client
+│   └── mcp_servers/
+│       ├── gmail_server.py        # IMAP/SMTP FastMCP server
+│       ├── github_server.py       # GitHub API FastMCP server
+│       ├── image_audio_server.py  # Audio/Image FastMCP server
+│       └── uni_backend_server.py  # University backend FastMCP server
+│
+└── app/
+    └── backend/
+        ├── main.py                # FastAPI app: lifespan, routers, static files
+        ├── docker-compose.yaml    # Kafka + Zookeeper services
+        ├── requirements.txt       # Backend-specific dependencies
+        ├── frontend/              # Chat UI (HTML/CSS/JS)
+        └── api/
+            ├── chat/
+            │   └── router.py      # POST /chat/message — agent endpoint with caching
+            ├── user/              # User auth endpoints
+            ├── books/             # Books CRUD endpoints
+            ├── university/        # University endpoints
+            ├── department/        # Department endpoints
+            └── utils/
+                ├── redis_client.py   # Redis client + @cache decorator
+                ├── kafka_producer.py # Kafka event publisher
+                ├── kafka_consumer.py # Kafka event consumer
+                ├── auth.py           # JWT auth utilities
+                ├── hash_password.py  # Password hashing
+                └── db_collection.py  # Database helpers
 ```
 
 ---
 
 ## Prerequisites
 
-*   Python 3.8+
-*   An active OpenRouter API Key
-*   A Gmail Address and Google App Password (required for IMAP/SMTP integrations)
+- Python 3.9+
+- Redis (running on `localhost:6379`)
+- Docker & Docker Compose (for Kafka)
+- An active **OpenRouter API Key**
+- A **Gmail** address with an App Password
+- A **GitHub Personal Access Token** (scopes: `repo`, `workflow`, `public_repo`)
 
 ---
 
 ## Installation & Setup
 
-1.  **Clone the repository and enter the directory:**
-    ```bash
-    git clone <repository-url>
-    cd agent
-    ```
+### 1. Clone and enter the repo
+```bash
+git clone <repository-url>
+cd agent
+```
 
-2.  **Create a virtual environment and install dependencies:**
-    ```bash
-    python -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
-    ```
+### 2. Create a virtual environment
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
-3.  **Configure environment variables:**
-    Create a `.env` file in the project root containing:
-    ```env
-    OPENROUTER_API_KEY=your_openrouter_api_key_here
-    GMAIL_ADDRESS=your_gmail_address_here
-    GMAIL_APP_PASSWORD=your_gmail_app_password_here
-    ```
+### 3. Install dependencies
+```bash
+# Root-level agent dependencies
+pip install -r requirements.txt
 
-    > [!IMPORTANT]
-    > **Gmail credentials require an App Password.** Regular Google passwords will fail due to authentication blocks. Visit your Google Account settings, go to Security, and generate a new **App Password**.
+# Backend dependencies
+pip install -r app/backend/requirements.txt
+```
+
+### 4. Configure environment variables
+Copy `.env.example` to `.env` and fill in your credentials:
+```bash
+cp .env.example .env
+```
+
+```env
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+GITHUB_TOKEN=your_github_personal_access_token_here
+GMAIL_ADDRESS=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_gmail_app_password_here
+```
+
+> [!IMPORTANT]
+> **Gmail requires an App Password**, not your regular Google password. Generate one at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+
+> [!IMPORTANT]
+> **GitHub token** needs `repo`, `workflow`, and `public_repo` scopes. Generate one at [github.com/settings/tokens](https://github.com/settings/tokens).
+
+### 5. Start infrastructure services
+```bash
+cd app/backend
+docker-compose up -d
+```
+This starts Kafka and Zookeeper.
+
+### 6. Start Redis
+```bash
+redis-server
+```
 
 ---
 
-## Usage
+## Running the Application
 
-Start the agent in interactive terminal mode:
+### Web Backend (with Chat UI)
+```bash
+cd app/backend
+uvicorn main:app --reload
+```
+
+Then open [http://localhost:8000](http://localhost:8000) in your browser to use the chat interface.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Chat UI frontend |
+| `/chat/message` | POST | Send a message to the agent |
+| `/chat/health` | GET | Check if the agent is ready |
+| `/user/api/v1/login` | POST | User authentication |
+| `/department/api/v1` | GET | List departments |
+
+### Terminal CLI (standalone agent)
 ```bash
 python main.py
 ```
 
-### Example Commands
-*   *"Read my latest 3 emails"*
-*   *"Search for emails with subject 'Meeting'"*
-*   *"Save draft to test@example.com with subject 'Hello' and body 'This is a test draft'"*
-*   *"Send the draft with subject 'Hello'"*
-*   *"Transcribe the audio file at path media/transcribing_1.mp3"*
+Type `exit` or `quit` to end the session.
 
-Type `exit` or `quit` to terminate the session.
+### Example Prompts
+- *"Read my latest 3 emails"*
+- *"Search GitHub for LangChain repositories"*
+- *"Get all departments"*
+- *"Transcribe the audio file at media/recording.mp3"*
+- *"Save a draft to test@example.com with subject 'Hello'"*
 
+---
+
+## Caching Behaviour
+
+Responses from `POST /chat/message` are cached in Redis for **120 seconds**. If the same message is sent again within that window, the cached response is returned immediately without calling the LLM or any MCP tools.
+
+You will see these log messages:
+```
+CACHE HIT   ← served from Redis, no API call made
+CACHE MISS  ← first time seen, agent runs and result is stored
+```
+
+---
 
 ## Developer Documentation
 
-For deep dives into codebase execution flow, lifecycle events, and MCP message formats, refer to [claude.md](./claude.md).
+For deep dives into the execution flow, MCP message formats, and lifecycle events, see [claude.md](./claude.md).
