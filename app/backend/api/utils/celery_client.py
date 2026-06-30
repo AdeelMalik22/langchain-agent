@@ -1,5 +1,16 @@
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from celery import Celery
+from dotenv import load_dotenv
 from app.backend.api.utils.celery_db import mongodb
+
+load_dotenv()
+
+GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
 
 celery = Celery(
