@@ -1,15 +1,5 @@
-import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
 from celery import Celery
-from dotenv import load_dotenv
-
-load_dotenv()
-
-GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+from app.backend.api.utils.celery_db import mongodb
 
 
 celery = Celery(
@@ -18,16 +8,43 @@ celery = Celery(
     backend="redis://localhost:6379/1",
 )
 
+
 celery.conf.update(
     task_track_started=True,
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-    # Retry config for transient SMTP failures
+
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+
+    worker_prefetch_multiplier=1,
 )
 
+
+
+
+@celery.task(
+    bind=True,
+    name="create.book",
+    max_retries=3,
+    default_retry_delay=10
+)
+def create_book_task(self, book_data):
+
+    try:
+
+        result = mongodb["books"].insert_one(
+            book_data
+        )
+
+        return {
+            "book_id": str(result.inserted_id),
+            "status": "created"
+        }
+
+    except Exception as exc:
+        raise self.retry(exc=exc)
 
 @celery.task(
     bind=True,

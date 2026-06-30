@@ -12,7 +12,7 @@ GENERAL RULES:
 - For calculations always use math tools.
 - Explain results clearly after tool execution.
 
-    ========================
+========================
 GITHUB TOOLS
 ========================
 
